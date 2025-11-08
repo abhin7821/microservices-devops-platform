@@ -1,0 +1,21 @@
+grafana:
+  envFromSecret: grafana-smtp-secret
+
+  grafana.ini:
+    smtp:
+      enabled: true
+      host: email-smtp.us-east-1.amazonaws.com:587
+      user: $__env{user}
+      password: $__env{password}
+      skip_verify: true
+      from_address: abhin.devops01@gmail.com
+      from_name: Grafana Alerts
+
+  sidecar:
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: "1"
+      provider:
+        foldersFromFilesStructure: true
+      searchNamespace: monitoring
