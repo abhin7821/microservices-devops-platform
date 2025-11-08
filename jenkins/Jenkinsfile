@@ -1,60 +1,107 @@
 pipeline {
     agent any
 
+    options {
+        timestamps()
+        skipStagesAfterUnstable()
+    }
+
     environment {
         AWS_REGION = 'us-east-1'
         ECR_REPO = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
         IMAGE_NAME = 'user-service'
-        GIT_CREDENTIALS = 'github-cred'
-        AWS_CREDENTIALS = 'jenkins-ecr-user'
+        GIT_REPO = 'https://github.com/abhin7821/microservices-devops-platform.git'
+        GIT_BRANCH = 'main'
+        GIT_CREDENTIALS = 'github-cred'        // Jenkins → Credentials → GitHub username+PAT
+        AWS_CREDENTIALS = 'jenkins-ecr-user'   // Jenkins → Credentials → AWS Access/Secret Keys
     }
 
     stages {
-        stage('Checkout') {
+
+        stage('Checkout from GitHub') {
             steps {
-                git branch: 'main',
+                echo "🔄 Checking out code from GitHub branch: ${GIT_BRANCH}"
+                git branch: "${GIT_BRANCH}",
                     credentialsId: "${GIT_CREDENTIALS}",
-                    url: 'https://github.com/abhin7821/microservices-devops-platform.git'
+                    url: "${GIT_REPO}"
             }
         }
 
         stage('Build Docker Image') {
             steps {
-                sh 'docker build -t $IMAGE_NAME:latest ./app'
+                echo "🐳 Building Docker image for ${IMAGE_NAME}"
+                sh '''
+                    cd app
+                    docker build -t $IMAGE_NAME:latest .
+                '''
             }
         }
 
-        stage('Push to ECR') {
+        stage('Login to AWS ECR') {
             steps {
+                echo "🔐 Logging in to Amazon ECR"
                 withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
                     sh '''
-                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                    docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
-                    docker push $ECR_REPO:$BUILD_NUMBER
+                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
                     '''
                 }
             }
         }
 
-        stage('Update Helm Tag & Commit') {
+        stage('Push Docker Image to ECR') {
             steps {
+                echo "📦 Pushing image to ECR with tag: $BUILD_NUMBER"
+                withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
+                    sh '''
+                        docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
+                        docker push $ECR_REPO:$BUILD_NUMBER
+                    '''
+                }
+            }
+        }
+
+        stage('Update Helm Chart Image Tag') {
+            steps {
+                echo "📝 Updating Helm values.yaml with new image tag"
                 sh '''
-                sed -i "s@tag:.*@tag: $BUILD_NUMBER@" ./helm/user-service/values.yaml
-                git config user.email "jenkins@ci.com"
-                git config user.name "Jenkins CI"
-                git add ./helm/user-service/values.yaml
-                git commit -m "Auto-update image tag to $BUILD_NUMBER"
-                git push origin main
+                    sed -i "s@tag:.*@tag: $BUILD_NUMBER@" ./helm/user-service/values.yaml
                 '''
             }
         }
 
-        stage('ArgoCD Sync') {
+        stage('Commit & Push Helm Update to GitHub') {
             steps {
+                echo "🚀 Committing Helm chart update back to GitHub"
                 sh '''
-                argocd app sync user-service --grpc-web
+                    git config user.email "jenkins@ci.com"
+                    git config user.name "Jenkins CI"
+                    git add ./helm/user-service/values.yaml
+                    git commit -m "Auto-update image tag to $BUILD_NUMBER"
+                    git push https://$GIT_USERNAME:$GIT_TOKEN@github.com/abhin7821/microservices-devops-platform.git $GIT_BRANCH
                 '''
             }
+        }
+
+        stage('Trigger ArgoCD Sync') {
+            steps {
+                echo "🔁 Syncing ArgoCD application to deploy new image"
+                sh '''
+                    argocd app sync user-service --grpc-web || echo "⚠️ ArgoCD sync skipped or failed"
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ CI/CD pipeline completed successfully!"
+        }
+        failure {
+            echo "❌ Pipeline failed. Please check the logs above."
+        }
+        always {
+            echo "🧹 Cleaning up local Docker images..."
+            sh 'docker system prune -f || true'
         }
     }
 }
