@@ -1,0 +1,60 @@
+pipeline {
+    agent any
+
+    environment {
+        AWS_REGION = 'us-east-1'
+        ECR_REPO = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
+        IMAGE_NAME = 'user-service'
+        GIT_CREDENTIALS = 'github-cred'
+        AWS_CREDENTIALS = 'jenkins-ecr-user'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main',
+                    credentialsId: "${GIT_CREDENTIALS}",
+                    url: 'https://github.com/abhin7821/microservices-devops-platform.git'
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                sh 'docker build -t $IMAGE_NAME:latest ./app'
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
+                    sh '''
+                    aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
+                    docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
+                    docker push $ECR_REPO:$BUILD_NUMBER
+                    '''
+                }
+            }
+        }
+
+        stage('Update Helm Tag & Commit') {
+            steps {
+                sh '''
+                sed -i "s@tag:.*@tag: $BUILD_NUMBER@" ./helm/user-service/values.yaml
+                git config user.email "jenkins@ci.com"
+                git config user.name "Jenkins CI"
+                git add ./helm/user-service/values.yaml
+                git commit -m "Auto-update image tag to $BUILD_NUMBER"
+                git push origin main
+                '''
+            }
+        }
+
+        stage('ArgoCD Sync') {
+            steps {
+                sh '''
+                argocd app sync user-service --grpc-web
+                '''
+            }
+        }
+    }
+}

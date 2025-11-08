@@ -1,0 +1,9 @@
+image:
+  repository: 442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service
+  tag: latest
+
+replicaCount: 2
+service:
+  type: LoadBalancer
+  port: 80
+  targetPort: 8080
