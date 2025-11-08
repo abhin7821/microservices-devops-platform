@@ -1,0 +1,36 @@
+apiVersion: networking.istio.io/v1alpha3
+kind: VirtualService
+metadata:
+  name: user-service-vs
+  namespace: default
+spec:
+  hosts:
+    - "*"
+  gateways:
+    - istio-system/istio-ingressgateway
+  http:
+    - name: primary
+      route:
+        - destination:
+            host: user-service
+            subset: stable
+          weight: 100
+        - destination:
+            host: user-service
+            subset: canary
+          weight: 0
+---
+apiVersion: networking.istio.io/v1alpha3
+kind: DestinationRule
+metadata:
+  name: user-service-dr
+  namespace: default
+spec:
+  host: user-service
+  subsets:
+    - name: stable
+      labels:
+        app: user-service
+    - name: canary
+      labels:
+        app: user-service
