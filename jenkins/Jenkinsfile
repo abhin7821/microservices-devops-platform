@@ -6,8 +6,9 @@ pipeline {
         ECR_REPO = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
         IMAGE_NAME = 'user-service'
         GIT_REPO = 'https://github.com/abhin7821/microservices-devops-platform.git'
-        GIT_CREDENTIALS = 'github-pat'
-        AWS_CREDENTIALS = 'jenkins-ecr-user'
+        GIT_CREDENTIALS = 'github-pat'            // GitHub PAT credential ID in Jenkins
+        AWS_CREDENTIALS = 'jenkins-ecr-user'      // AWS credential ID
+        ARGOCD_SERVER = 'argo-server-url'         // Optional if CLI sync
     }
 
     stages {
@@ -71,14 +72,18 @@ pipeline {
             steps {
                 echo "🔄 Triggering ArgoCD sync for user-service..."
                 script {
-                    sh '''
-                        if command -v argocd &> /dev/null; then
-                            echo "Running ArgoCD sync via CLI..."
-                            argocd app sync user-service --grpc-web || true
-                        else
-                            echo "ArgoCD CLI not installed. Sync will occur automatically via Git webhook."
-                        fi
-                    '''
+                    try {
+                        sh '''
+                            if command -v argocd &> /dev/null; then
+                                echo "Running ArgoCD sync via CLI..."
+                                argocd app sync user-service --grpc-web || true
+                            else
+                                echo "ArgoCD CLI not installed. Sync will occur automatically via Git webhook."
+                            fi
+                        '''
+                    } catch (err) {
+                        echo "⚠️ Warning: ArgoCD sync command failed or not available. Continuing..."
+                    }
                 }
             }
         }
@@ -94,21 +99,3 @@ pipeline {
     }
 
     post {
-        success {
-            echo "✅ SUCCESS: Build #${env.BUILD_NUMBER} completed successfully."
-            echo "Image pushed to ECR and Helm chart updated in GitHub."
-        }
-        failure {
-            echo "❌ FAILURE: Pipeline or rollout failed. Check ArgoCD logs."
-            node {
-                echo "🔍 Review logs for details or rerun pipeline after fixes."
-            }
-        }
-        always {
-            node {
-                echo "🧹 Cleanup done."
-                sh 'docker system prune -f || true'
-            }
-        }
-    }
-}
