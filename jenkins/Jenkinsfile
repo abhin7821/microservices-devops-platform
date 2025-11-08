@@ -1,107 +1,156 @@
 pipeline {
-    agent any
+  agent any
 
-    options {
-        timestamps()
-        skipStagesAfterUnstable()
+  options {
+    timestamps()
+    skipStagesAfterUnstable()
+  }
+
+  environment {
+    // ====== CONFIGURE THESE ======
+    AWS_REGION      = 'us-east-1'
+    AWS_CREDENTIALS = 'jenkins-ecr-user'      // AWS key+secret credentials ID in Jenkins
+    GIT_CREDENTIALS = 'github-cred'           // GitHub Username + PAT credentials ID
+    REPO_URL        = 'https://github.com/abhin7821/microservices-devops-platform.git'
+    ECR_REPO        = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
+    IMAGE_NAME      = 'user-service'
+    VALUES_FILE     = 'helm/user-service/values.yaml'
+
+    // Optional ArgoCD CLI trigger (auto-sync will still work if enabled in ArgoCD)
+    RUN_ARGOCD_SYNC = 'false'
+    ARGOCD_APP_NAME = 'user-service'
+    ARGOCD_SERVER   = ''  // e.g. https://your-argocd-elb.amazonaws.com
+  }
+
+  stages {
+
+    // -------------------- CHECKOUT --------------------
+    stage('Checkout') {
+      steps {
+        echo "📥 Cloning repository from GitHub..."
+        git branch: 'main',
+            credentialsId: "${GIT_CREDENTIALS}",
+            url: "${REPO_URL}"
+      }
     }
 
-    environment {
-        AWS_REGION = 'us-east-1'
-        ECR_REPO = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
-        IMAGE_NAME = 'user-service'
-        GIT_REPO = 'https://github.com/abhin7821/microservices-devops-platform.git'
-        GIT_BRANCH = 'main'
-        GIT_CREDENTIALS = 'github-cred'        // Jenkins → Credentials → GitHub username+PAT
-        AWS_CREDENTIALS = 'jenkins-ecr-user'   // Jenkins → Credentials → AWS Access/Secret Keys
+    // -------------------- DOCKER BUILD --------------------
+    stage('Build Docker Image') {
+      steps {
+        echo "🐳 Building Docker image..."
+        dir('app') {
+          sh 'docker build -t $IMAGE_NAME:latest .'
+        }
+      }
     }
 
-    stages {
-
-        stage('Checkout from GitHub') {
-            steps {
-                echo "🔄 Checking out code from GitHub branch: ${GIT_BRANCH}"
-                git branch: "${GIT_BRANCH}",
-                    credentialsId: "${GIT_CREDENTIALS}",
-                    url: "${GIT_REPO}"
-            }
+    // -------------------- LOGIN TO ECR --------------------
+    stage('Login to ECR') {
+      steps {
+        echo "🔑 Logging in to AWS ECR..."
+        withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
+          sh '''
+            aws ecr get-login-password --region $AWS_REGION \
+              | docker login --username AWS --password-stdin $ECR_REPO
+          '''
         }
-
-        stage('Build Docker Image') {
-            steps {
-                echo "🐳 Building Docker image for ${IMAGE_NAME}"
-                sh '''
-                    cd app
-                    docker build -t $IMAGE_NAME:latest .
-                '''
-            }
-        }
-
-        stage('Login to AWS ECR') {
-            steps {
-                echo "🔐 Logging in to Amazon ECR"
-                withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
-                    sh '''
-                        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                    '''
-                }
-            }
-        }
-
-        stage('Push Docker Image to ECR') {
-            steps {
-                echo "📦 Pushing image to ECR with tag: $BUILD_NUMBER"
-                withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
-                    sh '''
-                        docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
-                        docker push $ECR_REPO:$BUILD_NUMBER
-                    '''
-                }
-            }
-        }
-
-        stage('Update Helm Chart Image Tag') {
-            steps {
-                echo "📝 Updating Helm values.yaml with new image tag"
-                sh '''
-                    sed -i "s@tag:.*@tag: $BUILD_NUMBER@" ./helm/user-service/values.yaml
-                '''
-            }
-        }
-
-        stage('Commit & Push Helm Update to GitHub') {
-            steps {
-                echo "🚀 Committing Helm chart update back to GitHub"
-                sh '''
-                    git config user.email "jenkins@ci.com"
-                    git config user.name "Jenkins CI"
-                    git add ./helm/user-service/values.yaml
-                    git commit -m "Auto-update image tag to $BUILD_NUMBER"
-                    git push https://$GIT_USERNAME:$GIT_TOKEN@github.com/abhin7821/microservices-devops-platform.git $GIT_BRANCH
-                '''
-            }
-        }
-
-        stage('Trigger ArgoCD Sync') {
-            steps {
-                echo "🔁 Syncing ArgoCD application to deploy new image"
-                sh '''
-                    argocd app sync user-service --grpc-web || echo "⚠️ ArgoCD sync skipped or failed"
-                '''
-            }
-        }
+      }
     }
 
-    post {
-        success {
-            echo "✅ CI/CD pipeline completed successfully!"
-        }
-        failure {
-            echo "❌ Pipeline failed. Please check the logs above."
-        }
-        always {
-            echo "🧹 Cleaning up local Docker images..."
-            sh 'docker system prune -f || true'
-        }
+    // -------------------- PUSH IMAGE TO ECR --------------------
+    stage('Tag & Push Image') {
+      steps {
+        echo "🚀 Tagging and pushing Docker image to ECR..."
+        sh '''
+          docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
+          docker tag $IMAGE_NAME:latest $ECR_REPO:latest
+
+          docker push $ECR_REPO:$BUILD_NUMBER
+          docker push $ECR_REPO:latest
+        '''
+      }
     }
+
+    // -------------------- UPDATE HELM VALUES --------------------
+    stage('Update Helm Chart Image Tag') {
+      steps {
+        echo "📝 Updating Helm values.yaml with new image tag"
+        sh '''
+          sed -i "s@tag:.*@tag: $BUILD_NUMBER@" $VALUES_FILE
+        '''
+      }
+    }
+
+    // -------------------- COMMIT & PUSH TO GITHUB --------------------
+    stage('Commit & Push Helm Update to GitHub') {
+      steps {
+        echo "🚀 Committing Helm chart update back to GitHub"
+        withCredentials([usernamePassword(credentialsId: "${GIT_CREDENTIALS}", usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+          sh '''
+            set -e
+
+            # Allow Jenkins to modify repo safely
+            git config --global --add safe.directory "$PWD"
+            git config user.email "jenkins@ci.com"
+            git config user.name  "Jenkins CI"
+
+            # Stage the changed file
+            git add $VALUES_FILE
+
+            # Commit the change (skip if no change)
+            git commit -m "Auto-update image tag to $BUILD_NUMBER" || echo "No changes to commit."
+
+            # Securely push using PAT
+            git remote set-url origin "https://${GIT_USER}:${GIT_TOKEN}@github.com/abhin7821/microservices-devops-platform.git"
+            git push origin main
+          '''
+        }
+      }
+    }
+
+    // -------------------- ARGOCD SYNC --------------------
+    stage('Trigger ArgoCD Sync') {
+      when {
+        expression { return env.RUN_ARGOCD_SYNC.toLowerCase() == 'true' }
+      }
+      steps {
+        echo "🔄 Triggering ArgoCD Sync for $ARGOCD_APP_NAME"
+        sh '''
+          if ! command -v argocd >/dev/null 2>&1; then
+            echo "⚠️ ArgoCD CLI not found. Skipping sync..."
+            exit 0
+          fi
+
+          argocd app sync $ARGOCD_APP_NAME --grpc-web || true
+        '''
+      }
+    }
+
+    // -------------------- CLEANUP --------------------
+    stage('Cleanup Docker Images') {
+      steps {
+        echo "🧹 Cleaning up local Docker images..."
+        sh '''
+          docker rmi $IMAGE_NAME:latest || true
+          docker rmi $ECR_REPO:$BUILD_NUMBER || true
+          docker rmi $ECR_REPO:latest || true
+          docker system prune -f || true
+        '''
+      }
+    }
+  }
+
+  // -------------------- POST ACTIONS --------------------
+  post {
+    success {
+      echo "✅ SUCCESS: Build #${env.BUILD_NUMBER} completed."
+      echo "Image pushed to ECR and Helm chart updated in GitHub."
+    }
+    failure {
+      echo "❌ Pipeline failed. Please check the logs above."
+    }
+    always {
+      echo "🏁 Pipeline finished with status: ${currentBuild.currentResult}"
+    }
+  }
 }
