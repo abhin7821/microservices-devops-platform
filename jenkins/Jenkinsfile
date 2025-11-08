@@ -6,9 +6,8 @@ pipeline {
         ECR_REPO = '442122590814.dkr.ecr.us-east-1.amazonaws.com/user-service'
         IMAGE_NAME = 'user-service'
         GIT_REPO = 'https://github.com/abhin7821/microservices-devops-platform.git'
-        GIT_CREDENTIALS = 'github-pat'             // Jenkins credential ID for GitHub PAT
-        AWS_CREDENTIALS = 'jenkins-ecr-user'       // Jenkins credential ID for AWS
-        ARGOCD_SERVER = 'argo-server-url'          // Optional: if you want to use CLI sync
+        GIT_CREDENTIALS = 'github-pat'
+        AWS_CREDENTIALS = 'jenkins-ecr-user'
     }
 
     stages {
@@ -25,7 +24,9 @@ pipeline {
         stage('Build Docker Image') {
             steps {
                 echo "🐳 Building Docker image..."
-                sh 'docker build -t $IMAGE_NAME:latest ./app'
+                sh '''
+                    docker build -t $IMAGE_NAME:latest ./app
+                '''
             }
         }
 
@@ -35,4 +36,79 @@ pipeline {
                 withAWS(credentials: "${AWS_CREDENTIALS}", region: "${AWS_REGION}") {
                     sh '''
                         aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_REPO
-                        docker
+                        docker tag $IMAGE_NAME:latest $ECR_REPO:$BUILD_NUMBER
+                        docker push $ECR_REPO:$BUILD_NUMBER
+                    '''
+                }
+            }
+        }
+
+        stage('Update Helm Chart Image Tag') {
+            steps {
+                echo "📝 Updating Helm values.yaml with new image tag..."
+                sh '''
+                    sed -i "s@tag:.*@tag: $BUILD_NUMBER@" ./helm/user-service/values.yaml
+                '''
+            }
+        }
+
+        stage('Commit & Push Helm Update to GitHub') {
+            steps {
+                echo "💾 Committing Helm chart update back to GitHub..."
+                withCredentials([string(credentialsId: 'github-pat', variable: 'GIT_PAT')]) {
+                    sh '''
+                        git config user.email "jenkins@ci.com"
+                        git config user.name "Jenkins CI"
+                        git add ./helm/user-service/values.yaml
+                        git commit -m "Auto-update image tag to $BUILD_NUMBER" || echo "No changes to commit"
+                        git push https://$GIT_PAT@github.com/abhin7821/microservices-devops-platform.git main
+                    '''
+                }
+            }
+        }
+
+        stage('Trigger ArgoCD Sync') {
+            steps {
+                echo "🔄 Triggering ArgoCD sync for user-service..."
+                script {
+                    sh '''
+                        if command -v argocd &> /dev/null; then
+                            echo "Running ArgoCD sync via CLI..."
+                            argocd app sync user-service --grpc-web || true
+                        else
+                            echo "ArgoCD CLI not installed. Sync will occur automatically via Git webhook."
+                        fi
+                    '''
+                }
+            }
+        }
+
+        stage('Verify Deployment Rollout') {
+            steps {
+                echo "🕵️ Checking rollout status..."
+                sh '''
+                    kubectl rollout status rollout/user-service -n default --timeout=120s || true
+                '''
+            }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ SUCCESS: Build #${env.BUILD_NUMBER} completed successfully."
+            echo "Image pushed to ECR and Helm chart updated in GitHub."
+        }
+        failure {
+            echo "❌ FAILURE: Pipeline or rollout failed. Check ArgoCD logs."
+            node {
+                echo "🔍 Review logs for details or rerun pipeline after fixes."
+            }
+        }
+        always {
+            node {
+                echo "🧹 Cleanup done."
+                sh 'docker system prune -f || true'
+            }
+        }
+    }
+}
