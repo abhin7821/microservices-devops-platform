@@ -109,11 +109,21 @@ Node failures
 
 Service downtime
 
+📸 Screenshot: Prometheus Alerts
+
+<img width="1874" height="899" alt="Screenshot (252)" src="https://github.com/user-attachments/assets/7d265d02-02d3-400d-ae05-21bfc858d9f8" />
+
+📸 Screenshot: Alert Manager Alerts
+
+<img width="1898" height="917" alt="Screenshot (250)" src="https://github.com/user-attachments/assets/a63f2566-2202-45f1-8d9a-e4058deb4563" />
+
 📸 Screenshot: Grafana Alerts
 
-
+<img width="1913" height="944" alt="Screenshot (258)" src="https://github.com/user-attachments/assets/857bee6c-4f1e-4ef1-9973-6cb2a4bb20ff" />
 
 📸 Screenshot: Alert Email
+
+<img width="1920" height="929" alt="Screenshot (253)" src="https://github.com/user-attachments/assets/8ae25406-d741-4cff-901c-4f4ed503fbb7" />
 
 ☁️ AWS Resources Used
 
