@@ -46,8 +46,10 @@ Istio handles routing, canary deployment, and traffic management.
 
 Prometheus & Grafana monitor performance metrics and send alert emails through AWS SES.
 
+```
 🧩 Folder Structure
 
+```text
 microservices-devops-platform/
 ├── app/                        # Java microservice application code
 ├── jenkins/                    # Jenkinsfile and pipeline scripts
@@ -59,6 +61,7 @@ microservices-devops-platform/
 ├── monitoring/                 # Prometheus & Grafana setup manifests
 ├── README.md                   # Project documentation
 └── README_local.md             # Local environment setup
+```
 
 ⚙️ Jenkins Pipeline Flow
 
