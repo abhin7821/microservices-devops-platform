@@ -51,18 +51,39 @@ Prometheus & Grafana monitor performance metrics and send alert emails through A
 
 ```text
 microservices-devops-platform/
-├── app/                        # Java microservice application code
-├── jenkins/                    # Jenkinsfile and pipeline scripts
-├── helm/                       # Helm charts for Kubernetes deployment
-├── argo/                       # ArgoCD & Argo Rollout manifests
-├── istio-1.28.0/               # Istio gateway and virtual service configs
-├── alertmanager/               # Alertmanager configurations
-├── grafana-dashboards/         # Grafana custom dashboards (JSON)
-├── monitoring/                 # Prometheus & Grafana setup manifests
-├── README.md                   # Project documentation
-└── README_local.md             # Local environment setup
+├── alertmanager/
+│ ├── new-values.yaml # SMTP (AWS SES) integration values for Grafana
+│ └── user-service-alerts.yaml # Prometheus alert rules for User Service
+│
+├── app/
+│ ├── Dockerfile # Docker image build instructions
+│ └── index.html # Application frontend (demo)
+│
+├── argo/
+│ ├── application.yaml # ArgoCD Application manifest
+│ ├── user-service-app.yaml # Kubernetes deployment manifest for app
+│ ├── user-service-rollout.yaml # Argo Rollout (Canary strategy)
+│ └── user-service-istio.yaml # Istio VirtualService & DestinationRule
+│
+├── grafana-dashboards/
+│ └── argo-rollouts-dashboard.yaml # Custom Grafana dashboard JSON for Argo Rollouts
+│
+├── helm/
+│ └── user-service/
+│ ├── templates/
+│ │ ├── deployment.yaml # K8s deployment manifest
+│ │ └── service.yaml # K8s service manifest
+│ ├── Chart.yaml # Helm chart metadata
+│ └── values.yaml # Image tag, replicas, and configuration values
+│
+├── istio-1.28.0/
+│ └── manifest.yaml # Istio gateway, virtual service setup
+│
+├── jenkins/
+│ └── Jenkinsfile # CI/CD pipeline definition
+│
+└── README.md # Project documentation
 ```
-
 ⚙️ Jenkins Pipeline Flow
 
 Git Checkout
