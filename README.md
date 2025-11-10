@@ -24,7 +24,8 @@ It integrates industry-standard DevOps tools for automation, observability, and 
 ## 🏗️ Architecture Overview
 
 ### 🔄 CI/CD Workflow
-```text
+```
+
 GitHub → Jenkins → Docker → ECR → ArgoCD → EKS → Istio → Prometheus → Grafana
 
 Developer pushes code to GitHub.
