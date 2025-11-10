@@ -79,6 +79,7 @@ Jenkinsfile contains dynamic image tag updates and automated Argo sync steps.
 
 📸 Screenshot: Jenkins Pipeline
 
+<img width="1920" height="927" alt="Screenshot (231)" src="https://github.com/user-attachments/assets/a22df152-c045-4858-aca7-3453cef95112" />
 
 ☸️ Kubernetes + ArgoCD Deployment
 
@@ -90,9 +91,7 @@ Rollouts are automated and revert on health failure.
 
 📸 Screenshot: ArgoCD Dashboard
 
-
-📸 Screenshot: Istio Traffic Split
-
+<img width="1920" height="946" alt="Screenshot (232)" src="https://github.com/user-attachments/assets/fc3e4f36-2182-4064-88cb-d2550f2ca8ea" />
 
 📈 Monitoring & Alerting (Prometheus + Grafana)
 
@@ -112,6 +111,8 @@ Service downtime
 
 📸 Screenshot: Grafana Alerts
 
+
+
 📸 Screenshot: Alert Email
 
 ☁️ AWS Resources Used
@@ -125,9 +126,6 @@ Elastic Load Balancers – Public endpoints for Grafana, Prometheus, and App
 IAM Roles & Policies – Jenkins, ArgoCD, and EKS integrations
 
 S3 + ECR – artifact and image storage
-
-📸 Screenshot: AWS Load Balancers
-
 
 🧾 Key Highlights
 
