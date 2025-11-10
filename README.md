@@ -144,7 +144,7 @@ Service downtime
 
 📸 Screenshot: Alert Email
 
-<img width="1920" height="929" alt="Screenshot (253)" src="https://github.com/user-attachments/assets/8ae25406-d741-4cff-901c-4f4ed503fbb7" />
+<img width="1920" height="949" alt="Email Alert" src="https://github.com/user-attachments/assets/01ceec46-96ce-4cc8-9983-fea7b93bc95e" />
 
 ☁️ AWS Resources Used
 
